@@ -75,7 +75,7 @@ export class Auth {
         this.clientId = clientId;
         this.clientSecret = clientSecret;
         this.grantType = grantType;
-        this.authEndpoint = `${baseUrl}/auth/token`;
+        this.authEndpoint = `${baseUrl}/account/api/oauth/token`;
 
         logger.info(`Auth initialized with grant type: ${String(grantType)}`);
     }

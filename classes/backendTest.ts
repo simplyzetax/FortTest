@@ -1,4 +1,4 @@
-import { Auth, auth as defaultAuth } from '../utils/auth';
+import { Auth } from '../utils/auth';
 import logger from '../utils/logger';
 
 type BodyType = 'json' | 'form' | 'formData' | 'text';
@@ -42,7 +42,7 @@ export class BackendTest {
        * @param baseUrl Base URL for API requests
        * @param bearerToken Optional default bearer token for authentication
        */
-    constructor(baseUrl: string, bearerToken?: string, auth: Auth = defaultAuth) {
+    constructor(baseUrl: string, auth: Auth, bearerToken?: string) {
         this.baseUrl = baseUrl;
         this.bearerToken = bearerToken;
         this.auth = auth;
@@ -328,8 +328,9 @@ export class BackendTest {
 
     public static create(
         baseUrl: string,
-        bearerToken?: string
+        auth: Auth,
+        bearerToken?: string,
     ): BackendTest {
-        return new BackendTest(baseUrl, bearerToken);
+        return new BackendTest(baseUrl, auth, bearerToken);
     }
 }

@@ -7,7 +7,6 @@ const ArgsSchema = z.object({
     grant_type: z.enum(Object.keys(GrantTypes) as [string, ...string[]]).default("exchange_code") as z.ZodType<GrantType>,
     exchange_code: z.string().optional(),
     base_url: z.string().default("http://localhost:8787"),
-    access_token: z.string().optional(),
     // Add other auth-related fields as needed
     authorization_code: z.string().optional(),
     client_id: z.string(),
@@ -16,8 +15,6 @@ const ArgsSchema = z.object({
     password: z.string().optional(),
     refresh_token: z.string().optional(),
 }).refine(data => {
-    // If access_token is provided, we don't need grant_type specific parameters
-    if (data.access_token) return true;
 
     // Otherwise ensure required parameters are present based on grant_type
     switch (data.grant_type) {
@@ -31,8 +28,6 @@ const ArgsSchema = z.object({
 }, {
     message: "Missing required parameters for the selected grant_type"
 });
-
-// ...rest of the code remains unchanged
 
 type Args = z.infer<typeof ArgsSchema>;
 
@@ -62,37 +57,32 @@ async function main() {
         const args = parseArgs();
         let accessToken: string;
 
-        if (args.access_token) {
-            // Use provided access token directly
-            accessToken = args.access_token;
-        } else {
-            // Get access token via authentication
-            const auth = new Auth(args.client_id, args.client_secret, args.grant_type, args.base_url);
-            const authParams: Record<string, string> = {};
+        // Get access token via authentication
+        const auth = new Auth(args.client_id, args.client_secret, args.grant_type, args.base_url);
+        const authParams: Record<string, string> = {};
 
-            // Add relevant parameters based on grant type
-            switch (args.grant_type) {
-                case "exchange_code":
-                    authParams.exchange_code = args.exchange_code!;
-                    break;
-                case "password":
-                    authParams.username = args.username!;
-                    authParams.password = args.password!;
-                    break;
-                case "client_credentials":
-                    // We dont need to do anything
-                    break;
-                case "refresh_token":
-                    authParams.refresh_token = args.refresh_token!;
-                    break;
-            }
-
-            const authResponse = await auth.getAccessToken(args.grant_type, authParams);
-            accessToken = authResponse.access_token;
+        // Add relevant parameters based on grant type
+        switch (args.grant_type) {
+            case "exchange_code":
+                authParams.exchange_code = args.exchange_code!;
+                break;
+            case "password":
+                authParams.username = args.username!;
+                authParams.password = args.password!;
+                break;
+            case "client_credentials":
+                // We dont need to do anything
+                break;
+            case "refresh_token":
+                authParams.refresh_token = args.refresh_token!;
+                break;
         }
 
+        const authResponse = await auth.getAccessToken(args.grant_type, authParams);
+        accessToken = authResponse.access_token;
+
         // Create and export backend
-        backend = BackendTest.create(args.base_url, accessToken);
+        backend = BackendTest.create(args.base_url, auth);
 
         console.log("Backend client initialized successfully");
     } catch (error) {
