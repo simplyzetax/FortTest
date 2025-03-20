@@ -84,7 +84,7 @@ async function main() {
         accessToken = authResponse.access_token;
 
         // Create and export backend
-        backend = BackendTest.create(args.base_url, auth, authResponse.access_token);
+        backend = BackendTest.create(args.base_url, authResponse);
 
         logger.info("Backend client initialized successfully");
 
@@ -94,7 +94,6 @@ async function main() {
             try {
                 // Format test name for logging by removing './tests/' prefix and '.ts' suffix
                 const testName = testPath.replace('./tests/', '').replace('.ts', '');
-                logger.info(`Running test: ${testName}`);
 
                 // Import and run the test
                 const testModule = await import(`./${testPath}`);

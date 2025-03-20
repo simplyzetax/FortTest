@@ -1,7 +1,6 @@
 import fs from 'fs/promises';
-
-import { Auth } from '../utils/auth';
 import logger from '../utils/logger';
+import type { AuthResponse } from '../utils/auth';
 
 type BodyType = 'json' | 'form' | 'formData' | 'text';
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -33,34 +32,38 @@ interface TestResult {
     }
 }
 
+// Add a new type that combines Promise with test expectations
+type TestPromise = Promise<TestResult> & {
+    expects: {
+        toHaveStatus: (status: number) => Promise<TestResult>;
+        toHaveData: (predicate: (data: any) => boolean) => Promise<TestResult>;
+        toMatchData: (expected: any) => Promise<TestResult>;
+        toHaveHeader: (header: string, value?: string) => Promise<TestResult>;
+        toHaveProperty: (path: string, value?: any) => Promise<TestResult>;
+    }
+};
+
 export class BackendTest {
     private baseUrl: string;
-    private bearerToken?: string;
     private defaultHeaders: Record<string, string> = {};
-    private auth: Auth;
+    private authResponse: AuthResponse;
 
     /**
        * Creates a new BackendTest instance for API testing
        * @param baseUrl Base URL for API requests
        * @param bearerToken Optional default bearer token for authentication
        */
-    constructor(baseUrl: string, auth: Auth, bearerToken?: string) {
+    constructor(baseUrl: string, authResponse: AuthResponse) {
         this.baseUrl = baseUrl;
-        this.bearerToken = bearerToken;
-        this.auth = auth;
+        this.authResponse = authResponse;
 
         logger.info(`BackendTest initialized with base URL: ${this.baseUrl}`);
-
-        if (bearerToken) {
-            this.defaultHeaders['Authorization'] = `Bearer ${bearerToken}`;
-            logger.info('Default bearer token configured');
-        }
     }
 
     /**
      * Creates a test for the specified endpoint with description
      */
-    test(description: string, options: TestOptions): Promise<TestResult> {
+    test(description: string, options: TestOptions): TestPromise {
         const {
             method = 'GET',
             endpoint,
@@ -72,9 +75,9 @@ export class BackendTest {
             timeout = 30000
         } = options;
 
-        logger.info(`Running test: ${description}`);
+        logger.info(`⏳ Running test: ${description}`);
 
-        return this.executeRequest(method, endpoint, {
+        const resultPromise = this.executeRequest(method, endpoint, {
             bodyType,
             body,
             headers,
@@ -83,6 +86,79 @@ export class BackendTest {
             timeout,
             description
         });
+
+        // Create the expectation methods on the promise itself
+        const testPromise = resultPromise as TestPromise;
+        testPromise.expects = {
+            toHaveStatus: async (expectedStatus: number) => {
+                const result = await resultPromise;
+                const success = result.status === expectedStatus;
+                if (success) {
+                    logger.info(`✅ ${description}: Status is ${expectedStatus}`);
+                } else {
+                    logger.error(`❌ ${description}: Expected status ${expectedStatus}, got ${result.status}`);
+                }
+                return result;
+            },
+            toHaveData: async (predicate: (data: any) => boolean) => {
+                const result = await resultPromise;
+                const success = predicate(result.data);
+                if (success) {
+                    logger.info(`✅ ${description}: Data validation passed`);
+                } else {
+                    logger.error(`❌ ${description}: Data validation failed`);
+                }
+                return result;
+            },
+            toMatchData: async (expected: any) => {
+                const result = await resultPromise;
+                const success = JSON.stringify(result.data) === JSON.stringify(expected);
+                if (success) {
+                    logger.info(`✅ ${description}: Data matches expected`);
+                } else {
+                    logger.error(`❌ ${description}: Data doesn't match expected`);
+                    logger.debug({
+                        expected,
+                        actual: result.data,
+                    });
+                }
+                return result;
+            },
+            toHaveHeader: async (header: string, value?: string) => {
+                const result = await resultPromise;
+                const headerValue = result.headers.get(header);
+                const success = value ? headerValue === value : Boolean(headerValue);
+                if (success) {
+                    logger.info(`✅ ${description}: Header ${header} validation passed`);
+                } else {
+                    logger.error(`❌ ${description}: Header ${header} validation failed`);
+                }
+                return result;
+            },
+            toHaveProperty: async (path: string, value?: any) => {
+                const result = await resultPromise;
+                const props = path.split('.');
+                let current = result.data;
+
+                for (const prop of props) {
+                    if (current === undefined || current === null) {
+                        logger.error(`❌ ${description}: Property ${path} not found`);
+                        return result;
+                    }
+                    current = current[prop];
+                }
+
+                const success = value !== undefined ? current === value : current !== undefined;
+                if (success) {
+                    logger.info(`✅ ${description}: Property ${path} validation passed`);
+                } else {
+                    logger.error(`❌ ${description}: Property ${path} validation failed`);
+                }
+                return result;
+            },
+        };
+
+        return testPromise;
     }
 
     /**
@@ -150,8 +226,8 @@ export class BackendTest {
         };
 
         // Handle bearer token if specific to this request
-        if (bearerAuth && this.bearerToken) {
-            requestHeaders['Authorization'] = `Bearer ${this.bearerToken}`;
+        if (bearerAuth && this.authResponse.access_token) {
+            requestHeaders['Authorization'] = `Bearer ${this.authResponse.access_token}`;
         }
 
         // Configure content type based on body type
@@ -212,16 +288,6 @@ export class BackendTest {
             }
         }
 
-        // Log request details
-        logger.info({
-            message: `Test: ${description} - ${method} ${endpoint}`,
-            method,
-            url,
-            headers: requestOptions.headers,
-            bodyType,
-            body,
-        });
-
         try {
             // Send request and measure time
             const startTime = Date.now();
@@ -237,13 +303,13 @@ export class BackendTest {
                 responseData = await response.text();
             }
 
-            // Log response details
-            logger.info({
-                message: `Test Result: ${description} - Status ${response.status} (${responseTime}ms)`,
-                status: response.status,
-                responseTime,
-                data: responseData,
-            });
+            /*             // Log response details
+                        logger.info({
+                            message: `Test Result: ${description} - Status ${response.status} (${responseTime}ms)`,
+                            status: response.status,
+                            responseTime,
+                            data: responseData,
+                        }); */
 
             // Create the test result with expectation methods
             const result: TestResult = {
@@ -314,7 +380,7 @@ export class BackendTest {
                             logger.error(`❌ ${description}: Property ${path} validation failed`);
                         }
                         return result;
-                    }
+                    },
                 }
             };
 
@@ -330,10 +396,10 @@ export class BackendTest {
 
     public static create(
         baseUrl: string,
-        auth: Auth,
+        authResponse: AuthResponse,
         bearerToken?: string,
     ): BackendTest {
-        return new BackendTest(baseUrl, auth, bearerToken);
+        return new BackendTest(baseUrl, authResponse);
     }
 
     static async collectTestFiles(directory: string): Promise<string[]> {

@@ -48,7 +48,7 @@ export type RequiredGrantParams<G extends keyof GrantTypeParams | string> =
     : { params?: Record<string, any> };
 
 // Define the auth response structure
-interface AuthResponse {
+export interface AuthResponse {
     access_token: string;
     expires_in: number;
     expires_at: string;
