@@ -18,8 +18,8 @@ Fortnite Client Simulator is a robust testing framework designed to validate For
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/FortniteClientSimulator.git
-cd FortniteClientSimulator
+git clone https://github.com/simplyzetax/FortTest.git
+cd FortTest
 
 # Install dependencies
 bun install
