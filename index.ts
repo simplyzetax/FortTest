@@ -1,6 +1,8 @@
 import { BackendTest } from "./classes/backendTest";
 import { Auth, GrantTypes, type GrantType } from "./utils/auth";
 import { z } from "zod";
+import logger from "./utils/logger";
+import fs from "fs/promises";
 
 // Define CLI arguments schema
 const ArgsSchema = z.object({
@@ -82,11 +84,27 @@ async function main() {
         accessToken = authResponse.access_token;
 
         // Create and export backend
-        backend = BackendTest.create(args.base_url, auth);
+        backend = BackendTest.create(args.base_url, auth, authResponse.access_token);
 
-        console.log("Backend client initialized successfully");
+        logger.info("Backend client initialized successfully");
+
+        // Collect and run all tests
+        const testFiles = await BackendTest.collectTestFiles('./tests');
+        for (const testPath of testFiles) {
+            try {
+                // Format test name for logging by removing './tests/' prefix and '.ts' suffix
+                const testName = testPath.replace('./tests/', '').replace('.ts', '');
+                logger.info(`Running test: ${testName}`);
+
+                // Import and run the test
+                const testModule = await import(`./${testPath}`);
+            } catch (error) {
+                logger.error(`Error running test ${testPath}:`, error);
+            }
+        }
+
     } catch (error) {
-        console.error("Error initializing backend client:", error);
+        logger.fatal("Error initializing backend client:", error);
         process.exit(1);
     }
 }

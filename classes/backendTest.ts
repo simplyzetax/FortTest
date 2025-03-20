@@ -1,3 +1,5 @@
+import fs from 'fs/promises';
+
 import { Auth } from '../utils/auth';
 import logger from '../utils/logger';
 
@@ -332,5 +334,25 @@ export class BackendTest {
         bearerToken?: string,
     ): BackendTest {
         return new BackendTest(baseUrl, auth, bearerToken);
+    }
+
+    static async collectTestFiles(directory: string): Promise<string[]> {
+        const entries = await fs.readdir(directory, { withFileTypes: true });
+        const files: string[] = [];
+
+        for (const entry of entries) {
+            const path = `${directory}/${entry.name}`;
+
+            if (entry.isDirectory()) {
+                // Recursively collect files from subdirectory
+                const subFiles = await BackendTest.collectTestFiles(path);
+                files.push(...subFiles);
+            } else if (entry.isFile() && entry.name.endsWith('.ts')) {
+                // Add TypeScript files
+                files.push(path);
+            }
+        }
+
+        return files;
     }
 }
