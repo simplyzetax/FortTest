@@ -1,4 +1,3 @@
-import config from '../config';
 import logger from './logger';
 
 // Define parameter types for each grant type
@@ -17,6 +16,13 @@ interface PasswordParams {
     password: string;
 }
 
+export const GrantTypes = {
+    client_credentials: 'client_credentials',
+    exchange_code: 'exchange_code',
+    refresh_token: 'refresh_token',
+    password: 'password',
+} as const;
+
 // Create a mapped type for all grant types
 export type GrantTypeParams = {
     'client_credentials': ClientCredentialsParams;
@@ -24,6 +30,8 @@ export type GrantTypeParams = {
     'refresh_token': RefreshTokenParams;
     'password': PasswordParams;
 }
+
+export type GrantType = keyof typeof GrantTypes;
 
 // Make ParamsForGrantType more type-safe by enforcing required parameters
 export type ParamsForGrantType<G extends keyof GrantTypeParams | string> =
@@ -55,21 +63,21 @@ interface AuthResponse {
 export class Auth {
     private readonly clientId: string;
     private readonly clientSecret: string;
-    private readonly grantType: string;
+    private readonly grantType: GrantType;
     private readonly authEndpoint: string;
 
     constructor(
-        clientId = config.CLIENT_ID,
-        clientSecret = config.CLIENT_SECRET,
-        grantType = config.GRANT_TYPE,
-        baseUrl = config.BACKEND_URL
+        clientId: string,
+        clientSecret: string,
+        grantType: GrantType,
+        baseUrl: string,
     ) {
         this.clientId = clientId;
         this.clientSecret = clientSecret;
         this.grantType = grantType;
         this.authEndpoint = `${baseUrl}/auth/token`;
 
-        logger.info(`Auth initialized with grant type: ${grantType}`);
+        logger.info(`Auth initialized with grant type: ${String(grantType)}`);
     }
 
     /**
@@ -102,7 +110,7 @@ export class Auth {
      * Get an access token using the default grant type from config
      * The required parameters are determined by the grant type
      */
-    getAccessToken<G extends typeof config.GRANT_TYPE>(
+    getAccessToken<G extends GrantType>(
         params: ParamsForGrantType<G>
     ): Promise<AuthResponse>;
 
@@ -117,7 +125,7 @@ export class Auth {
      * Implementation for all overloaded getAccessToken methods
      */
     async getAccessToken<G extends string>(
-        grantTypeOrParams?: G | ParamsForGrantType<typeof config.GRANT_TYPE>,
+        grantTypeOrParams?: G | ParamsForGrantType<GrantType>,
         maybeParams?: ParamsForGrantType<G>
     ): Promise<AuthResponse> {
         // Determine if first parameter is grant type or params
@@ -142,12 +150,6 @@ export class Auth {
         // Construct form data based on grant type and params
         const formData = new URLSearchParams();
         formData.append('grant_type', actualGrantType);
-        formData.append('client_id', this.clientId);
-
-        // Only add client_secret for client_credentials or if explicitly configured
-        if (actualGrantType === 'client_credentials') {
-            formData.append('client_secret', this.clientSecret);
-        }
 
         // Add parameters based on grant type
         if (params) {
@@ -177,6 +179,7 @@ export class Auth {
             const response = await fetch(this.authEndpoint, {
                 method: 'POST',
                 headers: {
+                    'Authorization': `Basic ${Buffer.from(`${this.clientId}:${this.clientSecret}`).toString('base64')}`,
                     'Content-Type': 'application/x-www-form-urlencoded',
                 },
                 body: formData
@@ -251,9 +254,6 @@ export class Auth {
     }
 }
 
-// Create a default instance configured from the global config
-export const auth = new Auth();
-
 // Type guard functions for better developer experience
 export function isClientCredentialsGrantType(grantType: string): grantType is 'client_credentials' {
     return grantType === 'client_credentials';
@@ -272,4 +272,4 @@ export function isExchangeCodeGrantType(grantType: string): grantType is 'exchan
 }
 
 // Helper type to extract the params type needed based on config grant type
-export type ConfigGrantParams = ParamsForGrantType<typeof config.GRANT_TYPE>;
+export type ConfigGrantParams = ParamsForGrantType<GrantType>;

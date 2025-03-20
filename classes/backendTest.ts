@@ -1,4 +1,3 @@
-import config from '../config';
 import { Auth, auth as defaultAuth } from '../utils/auth';
 import logger from '../utils/logger';
 
@@ -43,8 +42,8 @@ export class BackendTest {
        * @param baseUrl Base URL for API requests
        * @param bearerToken Optional default bearer token for authentication
        */
-    constructor(baseUrl?: string, bearerToken?: string, auth: Auth = defaultAuth) {
-        this.baseUrl = baseUrl || config.BACKEND_URL;
+    constructor(baseUrl: string, bearerToken?: string, auth: Auth = defaultAuth) {
+        this.baseUrl = baseUrl;
         this.bearerToken = bearerToken;
         this.auth = auth;
 
